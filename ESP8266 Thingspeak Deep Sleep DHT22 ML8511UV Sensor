@@ -1,0 +1,111 @@
+
+
+#include <DHT.h>  // Including library for dht
+#include <WiFiClient.h>  
+#include <ESP8266WiFi.h>
+#include "ThingSpeak.h"
+
+
+ 
+    //  Enter your Write API key from ThingSpeak
+ 
+const char *ssid =  "ssid";     // replace with your wifi ssid 
+const char *pass =  "pass";     // replace with yor wifi password
+
+
+int analogPin = A0;
+const float referenceVoltage = 3.3;  // ESP8266's reference voltage (3.3V)
+
+const float V_REF_LOW = 0.99;        // Voltage corresponding to UV Index 0
+const float V_REF_HIGH = 2.82;       // Voltage corresponding to UV Index 15
+const int UV_INDEX_HIGH = 15;        // Maximum UV Index value
+
+ 
+#define DHTPIN 4          //pin where the dht11 is connected
+ 
+DHT dht(DHTPIN, DHT22);
+WiFiClient client;
+unsigned long myChannelNumber = 1;
+const char * myWriteAPIKey = "WriteAPIKey"; //write your Api keys
+const int UpdateInterval = 3 * 60 * 1000000;  // e.g. 3 * 60 * 1000000; for a 3-Min update interval (3-mins x 60-secs * 1000000uS)
+float h;
+float t;
+float hi;
+float uvIndex; 
+
+void setup() {
+  Serial.begin(115200);
+       delay(10);
+       dht.begin();
+
+
+      
+ 
+        WiFi.mode(WIFI_STA);   
+  
+  ThingSpeak.begin(client); 
+
+
+ {
+    
+    // Connect or reconnect to WiFi
+    if(WiFi.status() != WL_CONNECTED){
+      Serial.print("Attempting to connect");
+      while(WiFi.status() != WL_CONNECTED){
+        WiFi.begin(ssid, pass); 
+        delay(5000);     
+      } 
+      Serial.println("\nConnected.");
+    }
+    float h = dht.readHumidity();
+      Serial.print("Humidity: ");
+      Serial.println(h);
+      float t = dht.readTemperature();
+      Serial.print("Temperature (ºC): ");
+      Serial.println(t);
+      float hi = dht.computeHeatIndex(t, h, false);
+      Serial.print("HeatIndex: ");
+       Serial.println(hi);
+              if (isnan(h) || isnan(t)) 
+                 {
+                     Serial.println("Failed to read from DHT sensor!");
+                      return;
+                 }
+
+int sensorValue = analogRead(analogPin);  // Read analog value from sensor
+  float voltage = sensorValue * (referenceVoltage / 1023.0);  // Convert analog value to voltage
+  float uvIndex = (voltage - V_REF_LOW) / (V_REF_HIGH - V_REF_LOW) * UV_INDEX_HIGH;
+
+  Serial.print("Sensor Value: ");
+  Serial.println(sensorValue);
+  Serial.print("Voltage: ");
+  Serial.println(voltage, 2);
+  Serial.print("UV Index: ");
+  Serial.println(uvIndex, 2);
+
+ThingSpeak.setField(1, t);
+    //ThingSpeak.setField(1, temperatureF);
+    ThingSpeak.setField(2, h);
+    ThingSpeak.setField(3, hi);
+    ThingSpeak.setField(4, uvIndex);
+   
+
+    int x = ThingSpeak.writeFields(myChannelNumber, myWriteAPIKey);
+
+    if(x == 200){
+      Serial.println("Channel update successful.");
+    }
+    else{
+      Serial.println("Problem updating channel. HTTP error code " + String(x));
+    }
+    
+   Serial.println("Going to sleep now...");
+  ESP.deepSleep(UpdateInterval, WAKE_RF_DEFAULT); // Sleep for the time set by 'UpdateInterval' 
+  }
+  
+}
+
+void loop(){
+  // Do nothing as it will never get here!
+}
+
